@@ -3,12 +3,12 @@ package main
 import (
 	"bytes"
 	"encoding/json"
-	"github.com/sagernet/sing-box/common/srs"
 	"io"
 	"os"
 	"strconv"
 	"strings"
 
+	"github.com/sagernet/sing-box/common/srs"
 	C "github.com/sagernet/sing-box/constant"
 	"github.com/sagernet/sing-box/log"
 	"github.com/sagernet/sing-box/option"
@@ -96,6 +96,7 @@ func readYamlToRuleset(content []byte, outputPath string) error {
 	}
 	var (
 		rules            []option.DefaultHeadlessRule
+		hasStarOnlyRule  bool
 		domainArr        []string
 		domainSuffixArr  []string
 		domainKeywordArr []string
@@ -110,6 +111,20 @@ func readYamlToRuleset(content []byte, outputPath string) error {
 	for _, line := range rawRules {
 		switch true {
 		case strings.HasPrefix(line, "DOMAIN,"):
+			str := line[7:]
+			if str == "*" {
+				hasStarOnlyRule = true
+				continue
+			}
+			if strings.Contains(str, "*") {
+				strings.ReplaceAll(str, "*", "[^\\.]*?")
+				domainRegexArr = append(domainRegexArr, str[1:])
+				continue
+			}
+			if strings.HasPrefix(str, "+.") {
+				domainSuffixArr = append(domainSuffixArr, str[1:])
+				continue
+			}
 			domainArr = append(domainArr, line[7:])
 		case strings.HasPrefix(line, "DOMAIN-KEYWORD,"):
 			domainKeywordArr = append(domainKeywordArr, line[15:])
@@ -148,6 +163,12 @@ func readYamlToRuleset(content []byte, outputPath string) error {
 					DomainRegex:   domainRegexArr,
 				},
 			}
+			if hasStarOnlyRule {
+				domainRuleArr = append(domainRuleArr, option.DefaultHeadlessRule{
+					DomainKeyword: []string{"."},
+					Invert:        true,
+				})
+			}
 			if err := saveRuleSet(domainRuleArr, outputPath+"-domain"); err != nil {
 				return err
 			}
@@ -173,6 +194,12 @@ func readYamlToRuleset(content []byte, outputPath string) error {
 				DomainRegex:   domainRegexArr,
 				IPCIDR:        ipcidrArr,
 			})
+			if hasStarOnlyRule {
+				rules = append(rules, option.DefaultHeadlessRule{
+					DomainKeyword: []string{"."},
+					Invert:        true,
+				})
+			}
 		}
 	}
 	if len(portArr) > 0 {
