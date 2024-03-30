@@ -18,9 +18,12 @@ import (
 	"gopkg.in/yaml.v3"
 )
 
-var flagRuleSetCompileOutput string
+var (
+	flagMixMode       bool
+	flagConvertOutput string
+)
 
-const flagRuleSetCompileDefaultOutput = "<file_name>.srs"
+const flagConvertDefaultOutput = "<file_name>.srs"
 
 var mainCommand = &cobra.Command{
 	Use:   "sing-srs-converter [source-path]",
@@ -35,7 +38,8 @@ var mainCommand = &cobra.Command{
 }
 
 func init() {
-	mainCommand.PersistentFlags().StringVarP(&flagRuleSetCompileOutput, "output", "o", flagRuleSetCompileDefaultOutput, "Output file name")
+	mainCommand.Flags().StringVarP(&flagConvertOutput, "output", "o", flagConvertDefaultOutput, "Output file name")
+	mainCommand.Flags().BoolVarP(&flagMixMode, "mix", "m", false, "Output file name")
 }
 
 func main() {
@@ -64,10 +68,31 @@ func getRulesFromContent(content []byte) ([]string, error) {
 	return ruleArr, nil
 }
 
-func readYamlToRuleset(content []byte) ([]option.DefaultHeadlessRule, error) {
+func saveRuleSet(rules []option.DefaultHeadlessRule, outputPath string) error {
+	plainRuleSet := option.PlainRuleSetCompat{
+		Version: 1,
+		Options: option.PlainRuleSet{
+			Rules: common.Map(rules, func(it option.DefaultHeadlessRule) option.HeadlessRule {
+				return option.HeadlessRule{
+					Type:           C.RuleTypeDefault,
+					DefaultOptions: it,
+				}
+			}),
+		},
+	}
+	if err := saveSourceRuleSet(&plainRuleSet, outputPath+".json"); err != nil {
+		return err
+	}
+	if err := saveBinaryRuleSet(&plainRuleSet, outputPath+".srs"); err != nil {
+		return err
+	}
+	return nil
+}
+
+func readYamlToRuleset(content []byte, outputPath string) error {
 	rawRules, err := getRulesFromContent(content)
 	if err != nil {
-		return nil, err
+		return err
 	}
 	var (
 		rules            []option.DefaultHeadlessRule
@@ -113,39 +138,100 @@ func readYamlToRuleset(content []byte) ([]option.DefaultHeadlessRule, error) {
 			processPathArr = append(processPathArr, line[13:])
 		}
 	}
-	if len(domainArr) > 0 || len(domainSuffixArr) > 0 || len(domainKeywordArr) > 0 || len(domainRegexArr) > 0 || len(ipcidrArr) > 0 {
-		rule := option.DefaultHeadlessRule{
-			Domain:        domainArr,
-			DomainKeyword: domainKeywordArr,
-			DomainSuffix:  domainSuffixArr,
-			DomainRegex:   domainRegexArr,
-			IPCIDR:        ipcidrArr,
+	if !flagMixMode {
+		if len(domainArr) > 0 || len(domainSuffixArr) > 0 || len(domainKeywordArr) > 0 || len(domainRegexArr) > 0 {
+			domainRuleArr := []option.DefaultHeadlessRule{
+				{
+					Domain:        domainArr,
+					DomainKeyword: domainKeywordArr,
+					DomainSuffix:  domainSuffixArr,
+					DomainRegex:   domainRegexArr,
+				},
+			}
+			if err := saveRuleSet(domainRuleArr, outputPath+"-domain"); err != nil {
+				return err
+			}
+			rules = append(rules, domainRuleArr...)
 		}
-		rules = append(rules, rule)
+		if len(ipcidrArr) > 0 {
+			ipcidrRuleArr := []option.DefaultHeadlessRule{
+				{
+					IPCIDR: ipcidrArr,
+				},
+			}
+			if err := saveRuleSet(ipcidrRuleArr, outputPath+"-ip"); err != nil {
+				return err
+			}
+			rules = append(rules, ipcidrRuleArr...)
+		}
+	} else {
+		if len(domainArr) > 0 || len(domainSuffixArr) > 0 || len(domainKeywordArr) > 0 || len(domainRegexArr) > 0 || len(ipcidrArr) > 0 {
+			rules = append(rules, option.DefaultHeadlessRule{
+				Domain:        domainArr,
+				DomainKeyword: domainKeywordArr,
+				DomainSuffix:  domainSuffixArr,
+				DomainRegex:   domainRegexArr,
+				IPCIDR:        ipcidrArr,
+			})
+		}
 	}
 	if len(portArr) > 0 {
-		rule := option.DefaultHeadlessRule{
-			Port: portArr,
+		portRuleArr := []option.DefaultHeadlessRule{
+			{
+				Port: portArr,
+			},
 		}
-		rules = append(rules, rule)
+		if !flagMixMode {
+			if err := saveRuleSet(portRuleArr, outputPath+"-port"); err != nil {
+				return err
+			}
+		}
+		rules = append(rules, portRuleArr...)
 	}
 	if len(srcPortArr) > 0 {
-		rule := option.DefaultHeadlessRule{
-			SourcePort: srcPortArr,
+		srcPortRuleArr := []option.DefaultHeadlessRule{
+			{
+				SourcePort: srcPortArr,
+			},
 		}
-		rules = append(rules, rule)
+		if !flagMixMode {
+			if err := saveRuleSet(srcPortRuleArr, outputPath+"-src-port"); err != nil {
+				return err
+			}
+		}
+		rules = append(rules, srcPortRuleArr...)
 	}
 	if len(srcipcidrArr) > 0 {
-		rule := option.DefaultHeadlessRule{
-			SourceIPCIDR: srcipcidrArr,
+		srcIPCidrRuleArr := []option.DefaultHeadlessRule{
+			{
+				SourceIPCIDR: srcipcidrArr,
+			},
 		}
-		rules = append(rules, rule)
+		if !flagMixMode {
+			if err := saveRuleSet(srcIPCidrRuleArr, outputPath+"-src-ip"); err != nil {
+				return err
+			}
+		}
+		rules = append(rules, srcIPCidrRuleArr...)
 	}
-	if len(processNameArr) > 0 {
-		rule := option.DefaultHeadlessRule{
-			ProcessName: processNameArr,
+	if len(processNameArr) > 0 || len(processPathArr) > 0 {
+		var processRuleArr []option.DefaultHeadlessRule
+		if len(processNameArr) > 0 {
+			processRuleArr = append(processRuleArr, option.DefaultHeadlessRule{
+				ProcessName: processNameArr,
+			})
 		}
-		rules = append(rules, rule)
+		if len(processPathArr) > 0 {
+			processRuleArr = append(processRuleArr, option.DefaultHeadlessRule{
+				ProcessPath: processPathArr,
+			})
+		}
+		if !flagMixMode {
+			if err := saveRuleSet(processRuleArr, outputPath+"-process"); err != nil {
+				return err
+			}
+		}
+		rules = append(rules, processRuleArr...)
 	}
 	if len(processPathArr) > 0 {
 		rule := option.DefaultHeadlessRule{
@@ -153,7 +239,13 @@ func readYamlToRuleset(content []byte) ([]option.DefaultHeadlessRule, error) {
 		}
 		rules = append(rules, rule)
 	}
-	return rules, nil
+	if len(rules) == 0 {
+		return E.New("empty input")
+	}
+	if flagMixMode {
+		return saveRuleSet(rules, outputPath)
+	}
+	return nil
 }
 
 func saveSourceRuleSet(ruleset *option.PlainRuleSetCompat, outputPath string) error {
@@ -208,35 +300,14 @@ func compileRuleSet(sourcePath string) error {
 	if err != nil {
 		return err
 	}
-	rules, err := readYamlToRuleset(content)
-	if err != nil {
-		return E.Cause(err, "decode rule-provider")
-	}
-	plainRuleSet := option.PlainRuleSetCompat{
-		Version: 1,
-		Options: option.PlainRuleSet{
-			Rules: common.Map(rules, func(it option.DefaultHeadlessRule) option.HeadlessRule {
-				return option.HeadlessRule{
-					Type:           C.RuleTypeDefault,
-					DefaultOptions: it,
-				}
-			}),
-		},
-	}
 	var outputPath string
-	if flagRuleSetCompileOutput == flagRuleSetCompileDefaultOutput {
+	if flagConvertOutput == flagConvertDefaultOutput {
 		outputPath = sourcePath
 		if strings.HasSuffix(sourcePath, ".yaml") {
 			outputPath = sourcePath[:len(sourcePath)-5]
 		}
 	} else {
-		outputPath = flagRuleSetCompileOutput
+		outputPath = flagConvertOutput
 	}
-	if err := saveSourceRuleSet(&plainRuleSet, outputPath+".json"); err != nil {
-		return err
-	}
-	if err := saveBinaryRuleSet(&plainRuleSet, outputPath+".srs"); err != nil {
-		return err
-	}
-	return nil
+	return readYamlToRuleset(content, outputPath)
 }
