@@ -109,6 +109,9 @@ func readYamlToRuleset(content []byte, outputPath string) error {
 		processPathArr   []string
 	)
 	for _, line := range rawRules {
+		if strings.Contains(line, "AND") || strings.Contains(line, "OR") || strings.Contains(line, "NOT") {
+			continue
+		}
 		strArr := strings.Split(line, ",")
 		ruleType := strArr[0]
 		ruleContent := strArr[1]
