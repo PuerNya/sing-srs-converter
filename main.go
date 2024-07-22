@@ -140,7 +140,7 @@ func readYamlToRuleset(content []byte, outputPath string) error {
 		case strings.HasPrefix(line, "IP-CIDR6,"):
 			ipcidrArr = append(ipcidrArr, line[9:])
 		case strings.HasPrefix(line, "SRC-IP-CIDR,"):
-			ipcidrArr = append(srcipcidrArr, line[12:])
+			srcipcidrArr = append(srcipcidrArr, line[12:])
 		case strings.HasPrefix(line, "DST-PORT,"):
 			port, _ := strconv.Atoi(line[8:])
 			portArr = append(portArr, uint16(port))
