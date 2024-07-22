@@ -109,48 +109,50 @@ func readYamlToRuleset(content []byte, outputPath string) error {
 		processPathArr   []string
 	)
 	for _, line := range rawRules {
-		switch true {
-		case strings.HasPrefix(line, "DOMAIN,"):
-			str := line[7:]
-			if str == "*" {
+		strArr := strings.Split(line, ",")
+		ruleType := strArr[0]
+		ruleContent := strArr[1]
+		switch ruleType {
+		case "DOMAIN":
+			if ruleContent == "*" {
 				hasStarOnlyRule = true
 				continue
 			}
-			if strings.Contains(str, "*") {
-				strings.ReplaceAll(str, "*", "[^\\.]*?")
-				domainRegexArr = append(domainRegexArr, str[1:])
+			if strings.Contains(ruleContent, "*") {
+				strings.ReplaceAll(ruleContent, "*", "[^\\.]*?")
+				domainRegexArr = append(domainRegexArr, ruleContent[1:])
 				continue
 			}
-			if strings.HasPrefix(str, "+.") {
-				domainSuffixArr = append(domainSuffixArr, str[1:])
+			if strings.HasPrefix(ruleContent, "+.") {
+				domainSuffixArr = append(domainSuffixArr, ruleContent[1:])
 				continue
 			}
-			domainArr = append(domainArr, line[7:])
-		case strings.HasPrefix(line, "DOMAIN-KEYWORD,"):
-			domainKeywordArr = append(domainKeywordArr, line[15:])
-		case strings.HasPrefix(line, "DOMAIN-SUFFIX,"):
-			str := line[14:]
-			domainArr = append(domainArr, str)
-			str = "." + str
-			domainSuffixArr = append(domainSuffixArr, str)
-		case strings.HasPrefix(line, "DOMAIN-REGEX,"):
-			domainRegexArr = append(domainRegexArr, line[13:])
-		case strings.HasPrefix(line, "IP-CIDR,"):
-			ipcidrArr = append(ipcidrArr, line[8:])
-		case strings.HasPrefix(line, "IP-CIDR6,"):
-			ipcidrArr = append(ipcidrArr, line[9:])
-		case strings.HasPrefix(line, "SRC-IP-CIDR,"):
-			srcipcidrArr = append(srcipcidrArr, line[12:])
-		case strings.HasPrefix(line, "DST-PORT,"):
-			port, _ := strconv.Atoi(line[8:])
+			domainArr = append(domainArr, ruleContent)
+		case "DOMAIN-KEYWORD":
+			domainKeywordArr = append(domainKeywordArr, ruleContent)
+		case "DOMAIN-SUFFIX":
+			if ruleContent[0] == '.' {
+				domainSuffixArr = append(domainSuffixArr, ruleContent)
+				continue
+			}
+			domainArr = append(domainArr, ruleContent)
+			domainSuffixArr = append(domainSuffixArr, "."+ruleContent)
+		case "DOMAIN-REGEX":
+			domainRegexArr = append(domainRegexArr, ruleContent)
+		case "IP-CIDR", "IP-CIDR6":
+			ipcidrArr = append(ipcidrArr, ruleContent)
+		case "SRC-IP-CIDR":
+			srcipcidrArr = append(srcipcidrArr, ruleContent)
+		case "DST-PORT":
+			port, _ := strconv.Atoi(ruleContent)
 			portArr = append(portArr, uint16(port))
-		case strings.HasPrefix(line, "SRC-DST-PORT,"):
-			port, _ := strconv.Atoi(line[12:])
+		case "SRC-DST-PORT":
+			port, _ := strconv.Atoi(ruleContent)
 			srcPortArr = append(srcPortArr, uint16(port))
-		case strings.HasPrefix(line, "PROCESS-NAME,"):
-			processNameArr = append(processNameArr, line[13:])
-		case strings.HasPrefix(line, "PROCESS-PATH,"):
-			processPathArr = append(processPathArr, line[13:])
+		case "PROCESS-NAME":
+			processNameArr = append(processNameArr, ruleContent)
+		case "PROCESS-PATH":
+			processPathArr = append(processPathArr, ruleContent)
 		}
 	}
 	if !flagMixMode {
