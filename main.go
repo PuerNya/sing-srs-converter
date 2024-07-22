@@ -80,7 +80,10 @@ func saveRuleSet(rules []option.DefaultHeadlessRule, outputPath string) error {
 			}),
 		},
 	}
-	if err := saveSourceRuleSet(&plainRuleSet, outputPath+".json"); err != nil {
+	if err := saveSourceRuleSetVersion1(&plainRuleSet, outputPath+"-v2.json"); err != nil {
+		return err
+	}
+	if err := saveSourceRuleSetVersion2(&plainRuleSet, outputPath+"-v2.json"); err != nil {
 		return err
 	}
 	if err := saveBinaryRuleSet(&plainRuleSet, outputPath+".srs"); err != nil {
@@ -280,7 +283,7 @@ func readYamlToRuleset(content []byte, outputPath string) error {
 	return nil
 }
 
-func saveSourceRuleSet(ruleset *option.PlainRuleSetCompat, outputPath string) error {
+func saveSourceRuleSetVersion1(ruleset *option.PlainRuleSetCompat, outputPath string) error {
 	buffer := new(bytes.Buffer)
 	encoder := json.NewEncoder(buffer)
 	encoder.SetIndent("", "  ")
@@ -299,13 +302,39 @@ func saveSourceRuleSet(ruleset *option.PlainRuleSetCompat, outputPath string) er
 	return nil
 }
 
+func saveSourceRuleSetVersion2(r *option.PlainRuleSetCompat, outputPath string) error {
+	ruleset := option.PlainRuleSetCompat{
+		Version: 2,
+		Options: r.Options,
+	}
+	buffer := new(bytes.Buffer)
+	encoder := json.NewEncoder(buffer)
+	encoder.SetIndent("", "  ")
+	if err := encoder.Encode(&ruleset); err != nil {
+		return E.Cause(err, "encode config")
+	}
+	output, err := os.Create(outputPath)
+	if err != nil {
+		return E.Cause(err, "open output")
+	}
+	_, err = output.Write(buffer.Bytes())
+	output.Close()
+	if err != nil {
+		return E.Cause(err, "write output")
+	}
+	return nil
+}
+
 func saveBinaryRuleSet(ruleset *option.PlainRuleSetCompat, outputPath string) error {
-	ruleSet := ruleset.Upgrade()
+	ruleSet, err := ruleset.Upgrade()
+	if err != nil {
+		return err
+	}
 	outputFile, err := os.Create(outputPath)
 	if err != nil {
 		return err
 	}
-	err = srs.Write(outputFile, ruleSet)
+	err = srs.Write(outputFile, ruleSet, true)
 	if err != nil {
 		outputFile.Close()
 		os.Remove(outputPath)
